@@ -10,35 +10,38 @@ import (
 // read / write file
 
 // ReadFile retrun read data len
-// parmeter b should has enougeh cap(len+8)
-// parmeter b become full packet
-// if len(retur []byte) < (parmeter []byt) mean finall packet
-// if return nil,nil; mean last packet exactly is finall packet
-func ReadFile(fh *os.File, d []byte, bias int64, key *[16]byte) ([]byte, error) {
+// parmeter d should has enougeh cap(len+8)
+// return: packet; finally packet; error
+func ReadFile(fh *os.File, d []byte, bias int64, key *[16]byte) ([]byte, bool, error) {
 
 	_, err := fh.ReadAt(d, bias)
 	if err != nil {
 		if err == io.EOF {
 			fi, err := fh.Stat()
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			if fi.Size()-bias == 1 {
-				return nil, nil
+				d = nil
+				return nil, true, nil
 			}
-			d = make([]byte, fi.Size()-bias, fi.Size()-bias+8)
+			d = make([]byte, fi.Size()-bias, fi.Size()-bias+9)
 			_, err = fh.ReadAt(d, bias)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			return packet.PackageDataPacket(d, bias, *key, true)
 
-		} else {
-			return nil, err
 		}
-
+		return nil, false, err
 	}
 	return packet.PackageDataPacket(d, bias, *key, false)
 }
 
-func WriteFile()
+// ReadSpecifyData read specify data
+func ReadSpecifyData() {
+
+}
+
+// WriteFile as
+func WriteFile() {}

@@ -10,7 +10,7 @@ import (
 // PackageDataPacket pack data parse
 // pars: d:origin data; b:bias; k:secret key; final:finally data packet
 // make sure parmeter d has enough cap(len+9+16); otherwise it will use 2 times the memory
-func PackageDataPacket(d []byte, b int64, k [16]byte, final bool) ([]byte, error) {
+func PackageDataPacket(d []byte, b int64, k [16]byte, final bool) ([]byte, bool, error) {
 
 	//filling
 	var l uint8 = uint8(16 - (len(d)+9)%16)
@@ -42,10 +42,10 @@ func PackageDataPacket(d []byte, b int64, k [16]byte, final bool) ([]byte, error
 
 	if err := crypto.CbcEncrypt(k[:], d); com.Errorlog(err) { // encrypto
 		d = nil
-		return nil, err
+		return nil, final, err
 	}
 
-	return d, nil
+	return d, final, nil
 }
 
 // ParseDataPacket parse data packet

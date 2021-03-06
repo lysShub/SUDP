@@ -1,11 +1,8 @@
 package sudp
 
 import (
-	"SUDP/internal/packet"
-	"fmt"
 	"net"
 	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -18,14 +15,13 @@ type Addr struct {
 type sudp struct {
 
 	// sender
-	realSpeed    int           // send/receive real time speed, KB/s
-	controlSpeed int           // send control speed, renewal cycle: 1s
-	handle       chan *os.File // read file handle
-	key          [16]byte      // secret key
-	addr         Addr          // addr
-	mtu          int           // variable Byte
-	basePath     string        // base path
-	flag         bool          //link useable
+	speed    int           // send/receive real time speed, KB/s, renewal cycle: 1s
+	handle   chan *os.File // read file handle
+	key      [16]byte      // secret key
+	addr     Addr          // addr
+	mtu      int           // variable Byte
+	basePath string        // base path
+
 	// receiver
 	recoder []int64 // recode write, [1 3 7 9] mean write at 1-3 and 7-9;
 
@@ -47,44 +43,7 @@ func (c *sudp) Send() {
 	}
 }
 
-func (c *sudp) sender(fh *os.File, conn *net.UDPConn) {
-	fi, _ := fh.Stat()
+//
+func (c *sudp) Receive() {
 
-	name, err := filepath.Rel(c.basePath, fi.Name())
-
-	go c.senderSreader(conn)
-
-	for {
-		if c.flag {
-
-		} else {
-			packet.PackageDataPacket([]byte(name))
-			conn.Write()
-
-		}
-	}
-
-}
-
-// senderSreader sender's reader
-// receive receiver's data ; updata controlSpeed,
-func (c *sudp) senderSreader(conn *net.UDPConn) {
-	var b []byte = make([]byte, 2000)
-	for {
-		n, r, err := conn.ReadFromUDP(b)
-		if err != nil {
-			continue
-		}
-		if r == c.addr.raddr {
-			n, bias, _, _ := packet.ParseDataPacket(b[:n], c.key)
-			if bias > 100 {
-				fmt.Println(b[:n])
-			}
-		}
-	}
-}
-
-// speedToDelay  microseconds
-func (c *sudp) speedToDelay() time.Duration {
-	return time.Duration(1000000 * c.mtu / c.controlSpeed)
 }
