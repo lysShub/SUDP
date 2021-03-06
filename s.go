@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func (c *sudp) sender(fh *os.File, conn *net.UDPConn) {
+func (c *sudp) sender(fh *os.File, conn *net.UDPConn) error {
 	var start, end *bool
 	var ii, jj bool = false, false
 	start, end = &ii, &jj
@@ -29,7 +29,7 @@ func (c *sudp) sender(fh *os.File, conn *net.UDPConn) {
 	var i int64 = 0
 	for !*end {
 		var d []byte = make([]byte, c.mtu, c.mtu+10)
-		if *start { //send
+		if *start { //send file data
 
 			d, final, err := file.ReadFile(fh, d, i, &c.key)
 			if com.Errorlog(err) {
@@ -49,10 +49,10 @@ func (c *sudp) sender(fh *os.File, conn *net.UDPConn) {
 
 			i = i + int64(n)
 			time.Sleep(c.speedToDelay())
-		} else {
-			var ip []byte
-			ip = append(ip, uint8(fi.Size()>>24), uint8(fi.Size()>>16), uint8(fi.Size()>>8), uint8(fi.Size()))
-			d, _, err := packet.PackageDataPacket(append(ip, []byte(name)...), 0, c.key, false)
+		} else { // send info packet
+			var infop []byte
+			infop = append(infop, uint8(fi.Size()>>24), uint8(fi.Size()>>16), uint8(fi.Size()>>8), uint8(fi.Size()))
+			d, _, err := packet.PackageDataPacket(append(infop, []byte(name)...), 0, c.key, false)
 			if com.Errorlog(err) {
 				continue
 			}
@@ -61,6 +61,7 @@ func (c *sudp) sender(fh *os.File, conn *net.UDPConn) {
 			time.Sleep(time.Millisecond * 50)
 		}
 	}
+	return nil
 }
 
 // receiverOfSender sender's receiver

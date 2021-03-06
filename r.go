@@ -1,0 +1,4 @@
+package sudp
+
+//
+func receiver() {}
