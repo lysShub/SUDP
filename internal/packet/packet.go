@@ -53,7 +53,7 @@ func PackageDataPacket(d []byte, b int64, k [16]byte, final bool) ([]byte, bool,
 // return: origin data length; bias; final packet
 //
 //
-func ParseDataPacket(d []byte, k [16]byte) (uint16, int64, bool, error) {
+func ParseDataPacket(d []byte, k [16]byte) (int, int64, bool, error) {
 
 	if err := crypto.CbcDecrypt(k[:], d); com.Errorlog(err) { // decrypto
 		return 0, -1, false, err
@@ -81,5 +81,5 @@ func ParseDataPacket(d []byte, k [16]byte) (uint16, int64, bool, error) {
 	}
 
 	d = d[:len(d)-9-int(l)] // over write
-	return uint16(len(d)), b, end, nil
+	return len(d), b, end, nil
 }

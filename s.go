@@ -11,27 +11,26 @@ import (
 	"time"
 )
 
-func (c *sudp) sender(fh *os.File, conn *net.UDPConn) error {
-	var start, end *bool
-	var ii, jj bool = false, false
-	start, end = &ii, &jj
-	var rs chan []byte
+func (s *sudp) sender(fh *os.File, conn *net.UDPConn, bias int64) error {
+	var start, end, readyStart *bool
+	var xx, yy, zz = false, false, true
+	start, end, readyStart = &xx, &yy, &zz
+	var rs chan []byte //resend control
 	rs = make(chan []byte, 128)
 
 	fi, _ := fh.Stat()
-	name, _ := filepath.Rel(c.basePath, fi.Name())
+	name, _ := filepath.Rel(s.SBasePath, fi.Name())
 
 	// read receiver's reply
-	go c.receiverOfSender(conn, start, end, rs)
+	go s.receiverOfSender(conn, start, end, readyStart, rs)
 	// send resend data
-	go c.sendResendData(conn, fh, rs)
+	go s.sendResendData(conn, fh, rs)
 
-	var i int64 = 0
 	for !*end {
-		var d []byte = make([]byte, c.mtu, c.mtu+10)
+		var d []byte = make([]byte, s.MTU, s.MTU+15)
 		if *start { //send file data
 
-			d, final, err := file.ReadFile(fh, d, i, &c.key)
+			d, final, err := file.ReadFile(fh, d, bias, &s.Key)
 			if com.Errorlog(err) {
 				continue
 			}
@@ -40,19 +39,19 @@ func (c *sudp) sender(fh *os.File, conn *net.UDPConn) error {
 				if d == nil {
 					continue
 				}
-				continue
 			}
 			n, err := conn.Write(d)
 			if com.Errorlog(err) {
 				continue
 			}
 
-			i = i + int64(n)
-			time.Sleep(c.speedToDelay())
-		} else { // send info packet
+			bias = bias + int64(n)
+			time.Sleep(s.speedToDelay())
+		}
+		if *readyStart { // send info packet
 			var infop []byte
-			infop = append(infop, uint8(fi.Size()>>24), uint8(fi.Size()>>16), uint8(fi.Size()>>8), uint8(fi.Size()))
-			d, _, err := packet.PackageDataPacket(append(infop, []byte(name)...), 0, c.key, false)
+			infop = append(infop, uint8(fi.Size()>>32), uint8(fi.Size()>>24), uint8(fi.Size()>>16), uint8(fi.Size()>>8), uint8(fi.Size()))
+			d, _, err := packet.PackageDataPacket(append(infop, []byte(name)...), 0, s.Key, false)
 			if com.Errorlog(err) {
 				continue
 			}
@@ -66,30 +65,30 @@ func (c *sudp) sender(fh *os.File, conn *net.UDPConn) error {
 
 // receiverOfSender sender's receiver
 // receive receiver's data ; updata controlSpeed,
-func (c *sudp) receiverOfSender(conn *net.UDPConn, start *bool, end *bool, rs chan []byte) {
+func (s *sudp) receiverOfSender(conn *net.UDPConn, start *bool, end, readyStart *bool, rs chan []byte) {
 	var b []byte = make([]byte, 2000)
 	for {
 		n, r, err := conn.ReadFromUDP(b)
 		if err != nil {
 			continue
 		}
-		if r == c.addr.raddr {
-			_, bias, _, _ := packet.ParseDataPacket(b[:n], c.key)
+		if r == s.Addr.Raddr {
+			_, bias, _, _ := packet.ParseDataPacket(b[:n], s.Key)
 			if bias>>16 == 0x3FFFFF {
-				if bias&0x4000 == 1 { // speed control
-
-					if b[0] == 0 {
-						c.speed = c.speed - (int(b[1])<<8 + int(b[2]))
-					} else if b[0] == 1 {
-						c.speed = c.speed + (int(b[1])<<8 + int(b[2]))
-					}
-
-				} else if bias&0x2000 == 1 { //resend
+				// if bias&0x4000 == 1 { // speed control
+				// 	if b[0] == 0 {
+				// 		s.Speed = s.Speed - (int(b[1])<<8 + int(b[2]))
+				// 	} else if b[0] == 1 {
+				// 		s.Speed = s.Speed + (int(b[1])<<8 + int(b[2]))
+				// 	}
+				// } else
+				if bias&0x2000 == 1 { //resend
 
 				} else if bias&0x1 == 1 { // finish
 					*end = true
 				} else if bias|0x0 == 0 { //start
 					*start = true
+					*readyStart = false
 				}
 			}
 		}
@@ -98,27 +97,28 @@ func (c *sudp) receiverOfSender(conn *net.UDPConn, start *bool, end *bool, rs ch
 
 // sendSpecifyData send resend data
 // control speed
-func (c *sudp) sendResendData(conn *net.UDPConn, fh *os.File, rs chan []byte) {
+func (s *sudp) sendResendData(conn *net.UDPConn, fh *os.File, rs chan []byte) {
 	var d []byte = make([]byte, 7)
 	var bias, len int64
 	var r int64
 	go func() {
-		for {
-			time.Sleep(time.Second)
-			c.speed = c.speed + 1024 // 快增长
-			fmt.Println(r)
+		for { // speed control strategy
+			if r != 0 {
+				s.Speed = s.Speed + 512 // KB/s 快增长
+				fmt.Println(r)
+			}
 			r = 0
+			time.Sleep(s.SCF)
 		}
 	}()
 	for {
-
 		d = <-rs
 		bias = int64(d[5])<<40 + int64(d[4])<<32 + int64(d[3])<<24 + int64(d[2])<<16 + int64(d[1])<<8 + int64(d[0])
 		len = int64(d[7])<<8 + int64(d[6])
-		r = r + len
+		r = r + len // rcorde resend data size
 
 		p := make([]byte, len, len+15)
-		p, _, err := file.ReadFile(fh, p, bias, &c.key)
+		p, _, err := file.ReadFile(fh, p, bias, &s.Key)
 		if com.Errorlog(err) {
 			continue
 		}
@@ -129,6 +129,6 @@ func (c *sudp) sendResendData(conn *net.UDPConn, fh *os.File, rs chan []byte) {
 }
 
 // speedToDelay  microseconds
-func (c *sudp) speedToDelay() time.Duration {
-	return time.Duration(1000000 * c.mtu / c.speed)
+func (s *sudp) speedToDelay() time.Duration {
+	return time.Duration(1000000 * s.MTU / s.Speed)
 }
