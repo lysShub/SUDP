@@ -10,8 +10,8 @@ import (
 
 // Addr duplex link
 type Addr struct {
-	Saddr       *net.UDPAddr // sender's nat addr
-	Raddr       *net.UDPAddr // receiver's nat addr
+	Saddr       *net.UDPAddr // sender's WAN addr
+	Raddr       *net.UDPAddr // receiver's WAN addr
 	SLocalPort  uint16       // sender's Lan IP
 	RLocaloPort uint16       // receiver's Lan IP
 }
@@ -35,6 +35,18 @@ type sudp struct {
 	SCF time.Duration // Speed control frequency
 }
 
+func (s *sudp) Sinit(base string, conn *net.UDPConn) {
+	s.Speed = 1024 // 1MB/s
+	s.Key = [16]byte{
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}
+	s.MTU = 1372
+	s.SBasePath = base
+	s.Sconn = conn
+	s.SCF = time.Duration(time.Second)
+
+}
+
 // send send data packet
 func (s *sudp) Send(fh *os.File, startBias int64) error {
 	// laddr, err := net.ResolveUDPAddr("udp", ":"+strconv.Itoa(int(c.addr.sLocalPort)))
@@ -53,13 +65,13 @@ func (s *sudp) Send(fh *os.File, startBias int64) error {
 func (s *sudp) Receive() {
 
 	for {
-		fh, fi, err := s.receiverStartFile(s.Rconn)
-		fmt.Println("开始, 文件大小", fi)
+		fh, fs, err := s.receiverStartFile(s.Rconn)
+		fmt.Println("开始, 文件大小", fs)
 
 		if com.Errorlog(err) {
 			continue
 		}
-		err = s.receiver(fh, s.Rconn)
+		err = s.receiver(fh, fs, s.Rconn)
 		if com.Errorlog(err) {
 			continue
 		}
