@@ -4,6 +4,7 @@ import (
 	"SUDP/internal/com"
 	"SUDP/internal/file"
 	"SUDP/internal/packet"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -11,7 +12,47 @@ import (
 	"time"
 )
 
-func (s *sudp) sender(fh *os.File, conn *net.UDPConn, bias int64) error {
+func (s *SUDP) sender(fh *os.File, name string, conn *net.UDPConn, bias int64, endfile bool) error {
+
+	if err := s.start(fh, name, conn, bias); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *SUDP) start(fh *os.File, name string, conn *net.UDPConn, bias int64) error {
+
+	fi, _ := fh.Stat()
+	var infop []byte
+	infop = append(infop, uint8(fi.Size()>>32), uint8(fi.Size()>>24), uint8(fi.Size()>>16), uint8(fi.Size()>>8), uint8(fi.Size()))
+	d, _, err := packet.PackageDataPacket(append(infop, []byte(name)...), 0, s.Key, false)
+	if err != nil {
+		return err
+	}
+	_, err = conn.Write(d)
+	if err != nil {
+		return err
+	}
+	// 接收开始包
+	for i := 0; i < 16; i++ {
+		conn.SetReadDeadline(time.Now().Add(time.Second))
+		n, err := conn.Read(d)
+		if err != nil {
+			return err
+		}
+		_, bias, _, err = packet.ParseDataPacket(d[:n], s.Key)
+		if err != nil {
+			return err
+		}
+		if bias == 0x3FFFFF0000 {
+			return nil
+		}
+	}
+	return errors.New("exception")
+}
+
+func (s *SUDP) sender1(fh *os.File, conn *net.UDPConn, bias int64, endfile bool) error {
 	var start, end, readyStart *bool
 	var xx, yy, zz = false, false, true
 	start, end, readyStart = &xx, &yy, &zz
@@ -55,9 +96,25 @@ func (s *sudp) sender(fh *os.File, conn *net.UDPConn, bias int64) error {
 			if com.Errorlog(err) {
 				continue
 			}
+			fmt.Println("到达")
 			_, err = conn.Write(d)
 			com.Errorlog(err)
 			time.Sleep(time.Millisecond * 50)
+		}
+	}
+
+	// send trans end packet
+	if endfile {
+		d, _, err := packet.PackageDataPacket(nil, 0x3FFFFFFFFF, s.Key, false)
+		if com.Errorlog(err) {
+			return nil
+		}
+		for i := 0; i < 5; i++ {
+			_, err = conn.Write(d)
+			if com.Errorlog(err) {
+				return nil
+			}
+			time.Sleep(time.Millisecond * 100)
 		}
 	}
 	return nil
@@ -65,14 +122,14 @@ func (s *sudp) sender(fh *os.File, conn *net.UDPConn, bias int64) error {
 
 // receiverOfSender sender's receiver
 // receive receiver's data ; updata controlSpeed,
-func (s *sudp) receiverOfSender(conn *net.UDPConn, start *bool, end, readyStart *bool, rs chan []byte) {
+func (s *SUDP) receiverOfSender(conn *net.UDPConn, start *bool, end, readyStart *bool, rs chan []byte) {
 	var b []byte = make([]byte, 2000)
 	for {
 		n, r, err := conn.ReadFromUDP(b)
 		if err != nil {
 			continue
 		}
-		if r == s.Addr.Raddr {
+		if r == conn.RemoteAddr() {
 			_, bias, _, _ := packet.ParseDataPacket(b[:n], s.Key)
 			if bias>>16 == 0x3FFFFF {
 				// if bias&0x4000 == 1 { // speed control
@@ -97,7 +154,7 @@ func (s *sudp) receiverOfSender(conn *net.UDPConn, start *bool, end, readyStart 
 
 // sendSpecifyData send resend data
 // control speed
-func (s *sudp) sendResendData(conn *net.UDPConn, fh *os.File, rs chan []byte) {
+func (s *SUDP) sendResendData(conn *net.UDPConn, fh *os.File, rs chan []byte) {
 	var d []byte = make([]byte, 7)
 	var bias, len int64
 	var r int64
@@ -129,6 +186,6 @@ func (s *sudp) sendResendData(conn *net.UDPConn, fh *os.File, rs chan []byte) {
 }
 
 // speedToDelay  microseconds
-func (s *sudp) speedToDelay() time.Duration {
+func (s *SUDP) speedToDelay() time.Duration {
 	return time.Duration(1000000 * s.MTU / s.Speed)
 }

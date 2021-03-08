@@ -12,18 +12,22 @@ import (
 )
 
 // receiver
-func (s *sudp) receiver(fh *os.File, fs int64, conn *net.UDPConn) error {
+func (s *SUDP) receiver(fh *os.File, fs int64, conn *net.UDPConn, raddr *net.UDPAddr) error {
 	var rec []int64 = make([]int64, 0, 1024)
 	var finalPacket, final bool = false, false
+	var rd *net.UDPAddr
+	var err error
+	var n int
+	var bias int64
 
-	go s.sendResendPacket(conn, rec)
+	go s.sendResendPacket(conn, rec, raddr)
 	go func() {
 		if len(rec) == 2 && rec[1] == fs {
 			final = true
 			// 发送结束包
 			r, _, err := packet.PackageDataPacket(nil, 0x3FFFFF0001, s.Key, false)
 			com.Errorlog(err)
-			_, err = conn.WriteToUDP(r, s.Addr.Saddr)
+			_, err = conn.WriteToUDP(r, raddr)
 			com.Errorlog(err)
 
 		} else if rec[1] > fs {
@@ -34,11 +38,12 @@ func (s *sudp) receiver(fh *os.File, fs int64, conn *net.UDPConn) error {
 
 	for final {
 		var d []byte = make([]byte, s.MTU+8)
-		n, raddr, err := conn.ReadFromUDP(d)
-		com.Errorlog(err)
-		if raddr == s.Addr.Saddr {
-
-			n, bias, finalPacket, err := packet.ParseDataPacket(d[:n], s.Key)
+		n, rd, err = conn.ReadFromUDP(d)
+		if com.Errorlog(err) {
+			continue
+		}
+		if rd == raddr {
+			n, bias, finalPacket, err = packet.ParseDataPacket(d[:n], s.Key)
 			if com.Errorlog(err) {
 				continue
 			}
@@ -56,8 +61,10 @@ func (s *sudp) receiver(fh *os.File, fs int64, conn *net.UDPConn) error {
 	return nil
 }
 
-func (s *sudp) receiverStartFile(conn *net.UDPConn) (*os.File, int64, error) {
+// receiverStartFile return file handle, file size
+func (s *SUDP) receiverStartFile(conn *net.UDPConn) (*os.File, int64, *net.UDPAddr, bool, error) {
 	var flag bool = true
+
 	go func() {
 		time.Sleep(time.Second)
 		flag = false
@@ -66,42 +73,47 @@ func (s *sudp) receiverStartFile(conn *net.UDPConn) (*os.File, int64, error) {
 	for flag {
 		var d []byte = make([]byte, s.MTU, s.MTU+15)
 		n, raddr, err := conn.ReadFromUDP(d)
-		com.Errorlog(err)
-		if raddr == s.Addr.Saddr {
-			n, bias, _, err := packet.ParseDataPacket(d[:n], s.Key)
-			if com.Errorlog(err) {
-				continue
-			}
-			if bias>>16 == 0x3FFFFF && bias&0x8000 == 1 {
-				fs := int64(d[0])<<32 + int64(d[1])<<24 + int64(d[2])<<16 + int64(d[3])<<8 + int64(d[4])
-
-				path := filepath.ToSlash(s.RBasePath) + `/` + string(d[5:n])
-				fh, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0777)
-				if os.IsNotExist(err) {
-					err = os.MkdirAll(filepath.Dir(path), 0666)
-					if com.Errorlog(err) {
-						return nil, 0, err
-					}
-					fh, err = os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0777)
-					if com.Errorlog(err) {
-						return nil, 0, err
-					}
-				}
-				return fh, fs, err
-			}
+		if com.Errorlog(err) {
+			continue
 		}
+
+		n, bias, _, err := packet.ParseDataPacket(d[:n], s.Key)
+		if com.Errorlog(err) {
+			continue
+		}
+		if bias>>16 == 0x3FFFFF && bias&0x8000 == 1 {
+			fs := int64(d[0])<<32 + int64(d[1])<<24 + int64(d[2])<<16 + int64(d[3])<<8 + int64(d[4])
+
+			path := filepath.ToSlash(s.RBasePath) + `/` + string(d[5:n])
+			fh, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0777)
+			if os.IsNotExist(err) {
+				err = os.MkdirAll(filepath.Dir(path), 0666)
+				if com.Errorlog(err) {
+					return nil, 0, nil, false, err
+				}
+				fh, err = os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0777)
+				if com.Errorlog(err) {
+					return nil, 0, nil, false, err
+				}
+			}
+			return fh, fs, raddr, false, err
+		} else if bias == 0x3FFFFFFFFF {
+			return nil, 0, nil, true, nil
+
+		}
+
 	}
 
-	return nil, 0, errors.New("time out")
+	return nil, 0, nil, false, errors.New("time out")
 }
 
 // senderOfreceiver receiver's sender
-func (s *sudp) senderOfreceiver(conn *net.UDPConn) {
+func (s *SUDP) senderOfreceiver(conn *net.UDPConn) {
 
 }
 
 // sendResendPacket receiver send resend packet
-func (s *sudp) sendResendPacket(conn *net.UDPConn, rec []int64) {
+func (s *SUDP) sendResendPacket(conn *net.UDPConn, rec []int64, raddr *net.UDPAddr) {
 
 	for {
 		var flag int64 = rec[len(rec)-1]
@@ -117,13 +129,27 @@ func (s *sudp) sendResendPacket(conn *net.UDPConn, rec []int64) {
 		}
 		p, _, err := packet.PackageDataPacket(d, 0x3FFFFF4000, s.Key, false)
 		com.Errorlog(err)
-		_, err = conn.WriteToUDP(p, s.Addr.Raddr)
+		_, err = conn.WriteToUDP(p, raddr)
 		com.Errorlog(err)
 	}
 }
 
+// sendStartPacket send start packet
+func (s *SUDP) sendStartPacket(conn *net.UDPConn) error {
+
+	d, _, err := packet.PackageDataPacket(nil, 0x3FFFFF0000, s.Key, false)
+	if com.Errorlog(err) {
+		return err
+	}
+	_, err = conn.Write(d)
+	if com.Errorlog(err) {
+		return err
+	}
+	return nil
+}
+
 // writeRcorder balala
-func (s *sudp) writeRcorder(rec []int64, bias int64, endbias int64) []int64 {
+func (s *SUDP) writeRcorder(rec []int64, bias int64, endbias int64) []int64 {
 	fmt.Println(len(rec))
 
 	reclen := len(rec)
