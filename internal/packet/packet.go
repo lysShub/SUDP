@@ -7,11 +7,11 @@ import (
 	"hash/crc32"
 )
 
-// PackageDataPacket pack data parse
-// pars: d:origin data; b:bias; k:secret key; final:finally data packet
-// make sure parmeter d has enough cap(len+9+16); otherwise it will use 2 times the memory
-func PackageDataPacket(d []byte, b int64, k [16]byte, final bool) ([]byte, bool, error) {
-
+// PackageDataPacket 打包为数据包
+// 参数: d:原始数据; b:偏置; k:密钥; final:最后一个数据包
+// 返回：打包后数据包，原始数据长度，是否最后一个数据包
+func PackageDataPacket(d []byte, b int64, k [16]byte, final bool) ([]byte, int, bool, error) {
+	var dl int = len(d)
 	//filling
 	var l uint8 = uint8(16 - (len(d)+9)%16)
 	var flag bool = false
@@ -42,10 +42,10 @@ func PackageDataPacket(d []byte, b int64, k [16]byte, final bool) ([]byte, bool,
 
 	if err := crypto.CbcEncrypt(k[:], d); com.Errorlog(err) { // encrypto
 		d = nil
-		return nil, final, err
+		return nil, dl, final, err
 	}
 
-	return d, final, nil
+	return d, dl, final, nil
 }
 
 // ParseDataPacket parse data packet

@@ -38,11 +38,11 @@ func (s *SUDP) receiver(fh *os.File, fs int64, raddr *net.UDPAddr) error {
 	go func() {
 		for {
 			time.Sleep(time.Second)
-			fmt.Println("rec", rec)
+			// fmt.Println("rec", rec)
 			if len(rec) == 2 && rec[0] == 0 && rec[1] == fs {
 				final = true
 				// 发送结束包 一个文件传输完成
-				r, _, err := packet.PackageDataPacket(nil, 0x3FFFFF0001, s.Key, false)
+				r, _, _, err := packet.PackageDataPacket(nil, 0x3FFFFF0001, s.Key, false)
 				com.Errorlog(err)
 				_, err = conn.WriteToUDP(r, raddr)
 				com.Errorlog(err)
@@ -62,7 +62,6 @@ func (s *SUDP) receiver(fh *os.File, fs int64, raddr *net.UDPAddr) error {
 			continue
 		}
 		if rd.IP.Equal(raddr.IP) && rd.Port == raddr.Port {
-			fmt.Println("接收到数据")
 
 			n, bias, finalPacket, err = packet.ParseDataPacket(d[:n], s.Key)
 			if com.Errorlog(err) {
@@ -107,7 +106,7 @@ func (s *SUDP) sendResendPacket(conn *net.UDPConn, recorder *[]int64, raddr *net
 				break
 			}
 		}
-		p, _, err := packet.PackageDataPacket(d, 0x3FFFFF4000, s.Key, false)
+		p, _, _, err := packet.PackageDataPacket(d, 0x3FFFFF4000, s.Key, false)
 		com.Errorlog(err)
 		_, err = conn.WriteToUDP(p, raddr)
 		com.Errorlog(err)
@@ -117,7 +116,7 @@ func (s *SUDP) sendResendPacket(conn *net.UDPConn, recorder *[]int64, raddr *net
 // sReplyStart 回复开始包
 func (s *SUDP) sReplyStart(raddr *net.UDPAddr) error {
 	conn := s.Rconn
-	d, _, err := packet.PackageDataPacket(nil, 0x3FFFFF0000, s.Key, false)
+	d, _, _, err := packet.PackageDataPacket(nil, 0x3FFFFF0000, s.Key, false)
 	if err != nil {
 		return err
 	}

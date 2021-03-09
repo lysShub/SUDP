@@ -28,7 +28,7 @@ func (s *SUDP) sender(fh *os.File, name string, conn *net.UDPConn, bias int64, e
 	for {
 		d = make([]byte, s.MTU, s.MTU+25)
 
-		d, final, err := file.ReadFile(fh, d, bias, &s.Key)
+		d, n, final, err := file.ReadFile(fh, d, bias, &s.Key)
 		if com.Errorlog(err) {
 			continue
 		}
@@ -36,7 +36,7 @@ func (s *SUDP) sender(fh *os.File, name string, conn *net.UDPConn, bias int64, e
 			fmt.Println("发送了文件结束数据包")
 			break
 		}
-		n, err := conn.Write(d)
+		_, err = conn.Write(d)
 		if com.Errorlog(err) {
 			continue
 		}
@@ -60,7 +60,7 @@ func (s *SUDP) sstart(fh *os.File, name string, conn *net.UDPConn, bias int64) e
 	fi, _ := fh.Stat()
 	var infop []byte
 	infop = append(infop, uint8(fi.Size()>>32), uint8(fi.Size()>>24), uint8(fi.Size()>>16), uint8(fi.Size()>>8), uint8(fi.Size()))
-	d, _, err := packet.PackageDataPacket(append(infop, []byte(name)...), 0x3FFFFF0000, s.Key, false)
+	d, _, _, err := packet.PackageDataPacket(append(infop, []byte(name)...), 0x3FFFFF0000, s.Key, false)
 	if err != nil {
 		return err
 	}
@@ -137,7 +137,7 @@ func (s *SUDP) sendResendData(conn *net.UDPConn, fh *os.File, rs chan []byte) {
 		r = r + len // rcorde resend data size
 
 		p := make([]byte, len, len+25)
-		p, _, err := file.ReadFile(fh, p, bias, &s.Key)
+		p, _, _, err := file.ReadFile(fh, p, bias, &s.Key)
 		if com.Errorlog(err) {
 			continue
 		}
@@ -155,7 +155,7 @@ func (s *SUDP) speedToDelay() time.Duration {
 func (s *SUDP) sSendEndTranfer() error {
 	conn := s.Sconn
 	var d []byte = make([]byte, 0)
-	d, _, err := packet.PackageDataPacket(nil, 0x3FFFFFFFFF, s.Key, false)
+	d, _, _, err := packet.PackageDataPacket(nil, 0x3FFFFFFFFF, s.Key, false)
 	if err != nil {
 		return err
 	}
