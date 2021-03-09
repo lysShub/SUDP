@@ -9,9 +9,8 @@ import (
 
 // read / write file
 
-// ReadFile retrun read data len
-// parmeter d should has enougeh cap(len+8)
-// return: packet; finally packet; error
+// ReadFile 读取文件数据; 返回数据包，是否最后包。
+// 参数d应该有足够的容量(len+15); 否则会浪费内存。
 func ReadFile(fh *os.File, d []byte, bias int64, key *[16]byte) ([]byte, bool, error) {
 
 	_, err := fh.ReadAt(d, bias)

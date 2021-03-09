@@ -42,7 +42,7 @@ func CbcDecrypt(key []byte, c []byte) error {
 	}
 
 	if lenData%16 != 0 {
-		err := errors.New("the secret key's length != 16")
+		err := errors.New("the data's length != 16; length is " + strconv.Itoa(lenData))
 		if err != nil {
 			return err
 		}

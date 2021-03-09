@@ -27,8 +27,8 @@ func main() {
 	}
 	S.Rconn = conn
 	S.SCF = time.Second
-	S.RBasePath = `/mnt/d/OneDrive/code/go/project/SUDP/test/receiver/`
+	S.Rstorepath = `/mnt/d/OneDrive/code/go/project/SUDP/test/receiver/`
+	S.MTU = 1072
 
-	S.Receive()
-
+	fmt.Println(S.Receive())
 }

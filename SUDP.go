@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -13,21 +14,18 @@ import (
 type SUDP struct {
 
 	// sender
-	Speed     int          // send/receive real time speed, KB/s, renewal cycle: 1s
-	MTU       int          // variable Byte
-	SBasePath string       // sender's base path
-	Ssendpath string       // file or floder path
-	Sconn     *net.UDPConn // sender's udp conn
+	Speed int          // send/receive real time speed, KB/s, renewal cycle: 1s
+	MTU   int          // variable Bytes
+	Sconn *net.UDPConn // sender's udp conn
 
 	// receiver
-	recoder    []int64      // recode write;
-	Rconn      *net.UDPConn // receiver's udp conn
-	RBasePath  string       //receiver's base path
-	Rstorepath string       // store floder path
+	// recoder    []int64      //
+	Rconn      *net.UDPConn // UDP conn
+	Rstorepath string       // 接收端储存路径(文件夹、必须已存在)
 
 	// common
-	SCF time.Duration // Speed control frequency
-	Key [16]byte      // secret key
+	SCF time.Duration // Speed control frequency, 速度控制更新频率
+	Key [16]byte      // 密钥
 }
 
 // Sinit sss
@@ -55,15 +53,15 @@ func (s *SUDP) Rinit() {
 }
 
 // Send send data packet
-func (s *SUDP) Send(filepath string, startBias int64) error {
+func (s *SUDP) Send(path string, startBias int64) error {
 
-	fi, err := os.Stat(s.Ssendpath)
+	fi, err := os.Stat(path)
 	if com.Errorlog(err) {
 		return err
 	}
 
 	if fi.Mode().IsDir() { // floder
-		inf, basepath, out, err := com.GetFloderInfo(filepath)
+		inf, basepath, out, err := com.GetFloderInfo(path)
 		if err != nil {
 			return err
 		} else if out != nil {
@@ -79,42 +77,60 @@ func (s *SUDP) Send(filepath string, startBias int64) error {
 			if err != nil {
 				return err
 			}
-			if err := s.sender(fh, s.Sconn, 0, false); err != nil {
+			if err := s.sender(fh, p, s.Sconn, 0, false); err != nil {
 				return err
 			}
 		}
 
 	} else { // file
-		fh, err := os.Open(filepath)
+		fh, err := os.Open(path)
 		if err != nil {
 			return err
 		}
-		return s.sender(fh, s.Sconn, 0, true)
+		err = s.sender(fh, filepath.Base(path), s.Sconn, 0, true)
+		if err != nil {
+			fmt.Println(err)
+		}
 	}
 
-	return nil
+	return s.sSendEndTranfer()
 
 }
 
 // Receive receive data packet
-func (s *SUDP) Receive() {
+func (s *SUDP) Receive() error {
 
 	for {
 		fh, fs, raddr, transEnd, err := s.receiverStartFile(s.Rconn)
 		if com.Errorlog(err) {
-			continue
+			return err
 		}
 		fmt.Println("开始, 文件大小", fs)
 
 		if transEnd {
-			fmt.Println("传输结束")
-			return
+			fmt.Println("收到传输结束包,传输结束")
+			return nil
 		}
 
-		err = s.receiver(fh, fs, s.Rconn, raddr)
+		err = s.receiver(fh, fs, raddr)
 		if com.Errorlog(err) {
 			continue
 		}
 
 	}
+}
+
+// Test test
+func (s *SUDP) Test() {
+	conn := s.Sconn
+	conn.Write([]byte("sdsdsd"))
+}
+
+// resetmtu 由于封装为数据包的是否会填充，应该重置MTU
+func (s *SUDP) resetmtu() {
+
+	if s.MTU%16 != 0 {
+		s.MTU = s.MTU - s.MTU%16
+	}
+
 }

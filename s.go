@@ -8,25 +8,59 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path/filepath"
 	"time"
 )
 
 func (s *SUDP) sender(fh *os.File, name string, conn *net.UDPConn, bias int64, endfile bool) error {
 
-	if err := s.start(fh, name, conn, bias); err != nil {
+	if err := s.sstart(fh, name, conn, bias); err != nil {
 		return err
+	}
+	var end *bool
+	var e bool = false
+	end = &e
+
+	rs := make(chan []byte, 128) // 重发数据信息管道
+	go s.sreceiver(conn, end, rs)
+	go s.sendResendData(conn, fh, rs)
+
+	var d []byte
+	for {
+		d = make([]byte, s.MTU, s.MTU+25)
+
+		d, final, err := file.ReadFile(fh, d, bias, &s.Key)
+		if com.Errorlog(err) {
+			continue
+		}
+		if final {
+			fmt.Println("发送了文件结束数据包")
+			break
+		}
+		n, err := conn.Write(d)
+		if com.Errorlog(err) {
+			continue
+		}
+
+		bias = bias + int64(n)
+		time.Sleep(s.speedToDelay())
+	}
+
+	for {
+		if *end {
+			break
+		}
+		time.Sleep(time.Second)
 	}
 
 	return nil
 }
 
-func (s *SUDP) start(fh *os.File, name string, conn *net.UDPConn, bias int64) error {
+func (s *SUDP) sstart(fh *os.File, name string, conn *net.UDPConn, bias int64) error {
 
 	fi, _ := fh.Stat()
 	var infop []byte
 	infop = append(infop, uint8(fi.Size()>>32), uint8(fi.Size()>>24), uint8(fi.Size()>>16), uint8(fi.Size()>>8), uint8(fi.Size()))
-	d, _, err := packet.PackageDataPacket(append(infop, []byte(name)...), 0, s.Key, false)
+	d, _, err := packet.PackageDataPacket(append(infop, []byte(name)...), 0x3FFFFF0000, s.Key, false)
 	if err != nil {
 		return err
 	}
@@ -38,11 +72,11 @@ func (s *SUDP) start(fh *os.File, name string, conn *net.UDPConn, bias int64) er
 	for i := 0; i < 16; i++ {
 		conn.SetReadDeadline(time.Now().Add(time.Second))
 		n, err := conn.Read(d)
-		if err != nil {
+		if err != nil { // 超时
 			return err
 		}
 		_, bias, _, err = packet.ParseDataPacket(d[:n], s.Key)
-		if err != nil {
+		if err != nil { // 解析包出错
 			return err
 		}
 		if bias == 0x3FFFFF0000 {
@@ -52,108 +86,36 @@ func (s *SUDP) start(fh *os.File, name string, conn *net.UDPConn, bias int64) er
 	return errors.New("exception")
 }
 
-func (s *SUDP) sender1(fh *os.File, conn *net.UDPConn, bias int64, endfile bool) error {
-	var start, end, readyStart *bool
-	var xx, yy, zz = false, false, true
-	start, end, readyStart = &xx, &yy, &zz
-	var rs chan []byte //resend control
-	rs = make(chan []byte, 128)
-
-	fi, _ := fh.Stat()
-	name, _ := filepath.Rel(s.SBasePath, fi.Name())
-
-	// read receiver's reply
-	go s.receiverOfSender(conn, start, end, readyStart, rs)
-	// send resend data
-	go s.sendResendData(conn, fh, rs)
-
-	for !*end {
-		var d []byte = make([]byte, s.MTU, s.MTU+15)
-		if *start { //send file data
-
-			d, final, err := file.ReadFile(fh, d, bias, &s.Key)
-			if com.Errorlog(err) {
-				continue
-			}
-			if final {
-				*start = false
-				if d == nil {
-					continue
-				}
-			}
-			n, err := conn.Write(d)
-			if com.Errorlog(err) {
-				continue
-			}
-
-			bias = bias + int64(n)
-			time.Sleep(s.speedToDelay())
-		}
-		if *readyStart { // send info packet
-			var infop []byte
-			infop = append(infop, uint8(fi.Size()>>32), uint8(fi.Size()>>24), uint8(fi.Size()>>16), uint8(fi.Size()>>8), uint8(fi.Size()))
-			d, _, err := packet.PackageDataPacket(append(infop, []byte(name)...), 0, s.Key, false)
-			if com.Errorlog(err) {
-				continue
-			}
-			fmt.Println("到达")
-			_, err = conn.Write(d)
-			com.Errorlog(err)
-			time.Sleep(time.Millisecond * 50)
-		}
-	}
-
-	// send trans end packet
-	if endfile {
-		d, _, err := packet.PackageDataPacket(nil, 0x3FFFFFFFFF, s.Key, false)
-		if com.Errorlog(err) {
-			return nil
-		}
-		for i := 0; i < 5; i++ {
-			_, err = conn.Write(d)
-			if com.Errorlog(err) {
-				return nil
-			}
-			time.Sleep(time.Millisecond * 100)
-		}
-	}
-	return nil
-}
-
-// receiverOfSender sender's receiver
-// receive receiver's data ; updata controlSpeed,
-func (s *SUDP) receiverOfSender(conn *net.UDPConn, start *bool, end, readyStart *bool, rs chan []byte) {
-	var b []byte = make([]byte, 2000)
+// sreceiver 接收发送端的数据
+func (s *SUDP) sreceiver(conn *net.UDPConn, end *bool, rs chan []byte) {
+	var d []byte
 	for {
-		n, r, err := conn.ReadFromUDP(b)
-		if err != nil {
+
+		d = make([]byte, s.MTU+25)
+		conn.SetReadDeadline(time.Now().Add(time.Minute)) //重置
+		n, err := conn.Read(d)
+		if com.Errorlog(err) {
 			continue
 		}
-		if r == conn.RemoteAddr() {
-			_, bias, _, _ := packet.ParseDataPacket(b[:n], s.Key)
-			if bias>>16 == 0x3FFFFF {
-				// if bias&0x4000 == 1 { // speed control
-				// 	if b[0] == 0 {
-				// 		s.Speed = s.Speed - (int(b[1])<<8 + int(b[2]))
-				// 	} else if b[0] == 1 {
-				// 		s.Speed = s.Speed + (int(b[1])<<8 + int(b[2]))
-				// 	}
-				// } else
-				if bias&0x2000 == 1 { //resend
-
-				} else if bias&0x1 == 1 { // finish
-					*end = true
-				} else if bias|0x0 == 0 { //start
-					*start = true
-					*readyStart = false
-				}
-			}
+		n, bias, _, err := packet.ParseDataPacket(d[:n], s.Key)
+		if com.Errorlog(err) {
+			continue
 		}
+		if bias == 0x3FFFFF4000 { //重发包
+			for i := 0; i < n/7; i++ {
+				rs <- d[i*7 : (i+1)*7]
+			}
+		} else if bias == 0x3FFFFF0001 { //结束包
+			fmt.Println("收到文件传输结束包")
+			*end = true
+		}
+
 	}
+
 }
 
-// sendSpecifyData send resend data
-// control speed
+// 发送重发数据包
+// 根据重发数据包数量进行速度控制
 func (s *SUDP) sendResendData(conn *net.UDPConn, fh *os.File, rs chan []byte) {
 	var d []byte = make([]byte, 7)
 	var bias, len int64
@@ -162,7 +124,7 @@ func (s *SUDP) sendResendData(conn *net.UDPConn, fh *os.File, rs chan []byte) {
 		for { // speed control strategy
 			if r != 0 {
 				s.Speed = s.Speed + 512 // KB/s 快增长
-				fmt.Println(r)
+
 			}
 			r = 0
 			time.Sleep(s.SCF)
@@ -174,7 +136,7 @@ func (s *SUDP) sendResendData(conn *net.UDPConn, fh *os.File, rs chan []byte) {
 		len = int64(d[7])<<8 + int64(d[6])
 		r = r + len // rcorde resend data size
 
-		p := make([]byte, len, len+15)
+		p := make([]byte, len, len+25)
 		p, _, err := file.ReadFile(fh, p, bias, &s.Key)
 		if com.Errorlog(err) {
 			continue
@@ -185,7 +147,18 @@ func (s *SUDP) sendResendData(conn *net.UDPConn, fh *os.File, rs chan []byte) {
 
 }
 
-// speedToDelay  microseconds
+// speedToDelay  获取延时(毫秒)
 func (s *SUDP) speedToDelay() time.Duration {
 	return time.Duration(1000000 * s.MTU / s.Speed)
+}
+
+func (s *SUDP) sSendEndTranfer() error {
+	conn := s.Sconn
+	var d []byte = make([]byte, 0)
+	d, _, err := packet.PackageDataPacket(nil, 0x3FFFFFFFFF, s.Key, false)
+	if err != nil {
+		return err
+	}
+	_, err = conn.Write(d)
+	return err
 }

@@ -5,7 +5,6 @@ import (
 	"SUDP/internal/com"
 	"fmt"
 	"net"
-	"os"
 	"time"
 )
 
@@ -27,16 +26,11 @@ func main() {
 	S.Key = [16]byte{
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	}
-	S.MTU = 1372
+	S.MTU = 1072
 	S.Speed = 1024 // 1MB
-	S.RBasePath = `E:/a/`
-	S.Rconn = conn
+	S.Sconn = conn
 	S.SCF = time.Second
 
-	fh, err := os.Open(`E:/a/classes.dex`)
-	if com.Errorlog(err) {
-		return
-	}
-	fmt.Println(S.Send(fh, 0))
+	fmt.Println(S.Send(`E:/a/classes.dex`, 0))
 
 }

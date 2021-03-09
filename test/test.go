@@ -20,15 +20,6 @@ func main() {
 	// fmt.Println("bias", bias)
 	// fmt.Println(final)
 
-	inf, basePath, out, err := com.GetFloderInfo(`E:\a`)
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println(out)
-	fmt.Println(basePath)
-	// fmt.Println(inf)
-	for i, v := range inf.N {
-		fmt.Println(v, inf.S[i], inf.T[i])
-	}
+	fmt.Println("ff" + com.Wrap() + "ffff")
 
 }
