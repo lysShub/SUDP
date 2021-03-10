@@ -103,7 +103,7 @@ func (s *SUDP) sendResendPacket(conn *net.UDPConn, recorder *[]int64, raddr *net
 				d = append(d, uint8(bias>>32), uint8(bias>>24), uint8(bias>>16), uint8(bias>>8), uint8(bias), uint8(len>>8), uint8(len))
 				i = i + 7
 			}
-			if i >= 520 { // 数据包太大l
+			if i >= 520 { // 数据包太大
 				break
 			}
 		}
