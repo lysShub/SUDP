@@ -32,10 +32,7 @@ func (s *SUDP) sender(fh *os.File, name string, conn *net.UDPConn, bias int64, e
 		if com.Errorlog(err) {
 			continue
 		}
-		if final {
-			fmt.Println("发送了文件结束数据包")
-			break
-		}
+
 		_, err = conn.Write(d)
 		if com.Errorlog(err) {
 			continue
@@ -43,6 +40,10 @@ func (s *SUDP) sender(fh *os.File, name string, conn *net.UDPConn, bias int64, e
 
 		bias = bias + int64(n)
 		time.Sleep(s.speedToDelay())
+		if final {
+			fmt.Println("发送了最后包")
+			break
+		}
 	}
 
 	for {
@@ -155,10 +156,15 @@ func (s *SUDP) speedToDelay() time.Duration {
 func (s *SUDP) sSendEndTranfer() error {
 	conn := s.Sconn
 	var d []byte = make([]byte, 0)
+
 	d, _, _, err := packet.PackageDataPacket(nil, 0x3FFFFFFFFF, s.Key, false)
+	fmt.Println("发送了传输任务结束包")
 	if err != nil {
 		return err
 	}
-	_, err = conn.Write(d)
+	for i := 0; i < 4; i++ {
+		_, err = conn.Write(d)
+		time.Sleep(time.Millisecond * 100)
+	}
 	return err
 }

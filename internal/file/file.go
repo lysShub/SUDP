@@ -13,6 +13,10 @@ import (
 // 参数d应该有足够的容量(len+15); 否则会浪费内存。
 func ReadFile(fh *os.File, d []byte, bias int64, key *[16]byte) ([]byte, int, bool, error) {
 
+	// if bias+int64(len(d))>= {
+
+	// }
+
 	_, err := fh.ReadAt(d, bias)
 	if err != nil {
 		if err == io.EOF {

@@ -50,9 +50,7 @@ func PackageDataPacket(d []byte, b int64, k [16]byte, final bool) ([]byte, int, 
 
 // ParseDataPacket parse data packet
 // 注意：使用本包解析后，d[:数据长度]才是原始数据
-// return: origin data length; bias; final packet
-//
-//
+// 返回: 原始数据长度; 偏置; 是否最后包
 func ParseDataPacket(d []byte, k [16]byte) (int, int64, bool, error) {
 
 	if err := crypto.CbcDecrypt(k[:], d); com.Errorlog(err) { // decrypto

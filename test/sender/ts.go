@@ -11,7 +11,7 @@ import (
 func main() {
 
 	laddr, err1 := net.ResolveUDPAddr("udp", ":19986") //192.168.43.183
-	raddr, err2 := net.ResolveUDPAddr("udp", "172.19.226.94:19986")
+	raddr, err2 := net.ResolveUDPAddr("udp", "172.19.228.218:19986")
 	if com.Errorlog(err1, err2) {
 		return
 	}

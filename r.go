@@ -39,7 +39,7 @@ func (s *SUDP) receiver(fh *os.File, fs int64, raddr *net.UDPAddr) error {
 		for {
 			time.Sleep(time.Second)
 			// fmt.Println("rec", rec)
-			if len(rec) == 2 && rec[0] == 0 && rec[1] == fs {
+			if len(rec) == 2 && rec[0] == 0 && rec[1] == fs-1 {
 				final = true
 				// 发送结束包 一个文件传输完成
 				r, _, _, err := packet.PackageDataPacket(nil, 0x3FFFFF0001, s.Key, false)
@@ -51,6 +51,7 @@ func (s *SUDP) receiver(fh *os.File, fs int64, raddr *net.UDPAddr) error {
 			// else if rec[len(rec)-1] > fs {
 			// 	fmt.Println("怎么回事，太大了")
 			// }
+			fmt.Println(rec)
 		}
 	}()
 
@@ -75,7 +76,7 @@ func (s *SUDP) receiver(fh *os.File, fs int64, raddr *net.UDPAddr) error {
 			com.Errorlog(err)
 
 			// 更新写入记录器
-			rec = s.writeRcorder(rec, bias, bias+int64(n)-1)
+			rec, _ = s.writeRcorder(rec, bias, bias+int64(n)-1)
 		}
 
 	}
@@ -167,8 +168,8 @@ func (s *SUDP) receiverStartFile(conn *net.UDPConn) (*os.File, int64, *net.UDPAd
 			}
 			return fh, fs, raddr, false, err
 		} else if bias == 0x3FFFFFFFFF { //结束传输任务
+			fmt.Println("接收到传输任务结束包")
 			return nil, 0, nil, true, nil
-
 		}
 
 	}
@@ -176,101 +177,54 @@ func (s *SUDP) receiverStartFile(conn *net.UDPConn) (*os.File, int64, *net.UDPAd
 	return nil, 0, nil, false, errors.New("time out")
 }
 
-// writeRcorder 更新写入记录器
-func (s *SUDP) writeRcorder(rec []int64, bias int64, endbias int64) []int64 {
-
-	reclen := len(rec)
-	ei := (len(rec)) - 1
-
-	if ei == -1 { // first
-		rec = append(rec, 0, endbias)
-		return rec
-	}
-	if bias-rec[ei] == 1 {
-		rec[ei] = bias + int64(endbias-bias+1) - 1
-		return rec
-	}
-	if bias-rec[ei] > 1 {
-		rec = append(rec, bias, endbias)
-		// resend
-		return rec
+// writeRcorder 文件写入记录器
+// 如果有覆盖写入，返回bool为true
+func (s *SUDP) writeRcorder(rec []int64, start, end int64) ([]int64, bool) {
+	var l int = len(rec)
+	if l == 0 {
+		rec = append(rec, start, end)
+		return rec, false
 	}
 
-	var a, b int = 0, 0
-	for i := ei; i > 0; i-- {
-		if rec[i] < endbias && a == 0 {
-			a = i
-		}
-		if rec[i] < bias && b == 0 {
-			b = i + 1
-		}
-	}
-	// b -- a
-	if a-b == -1 { // rebuild
-		var tmp []int64 = make([]int64, b, reclen+2)
-		copy(tmp, rec)
-		tmp = append(tmp, bias, endbias)
-		tmp = append(tmp, rec[b:]...)
-		rec = tmp
-	} else if b == a {
-		if a&0b1 == 1 {
-			if a+2 <= ei && rec[a+1]-endbias == 1 {
-				var tmp []int64 = make([]int64, b, reclen-2)
-				copy(tmp, rec)
-				tmp = append(tmp, rec[a+2:]...)
-				rec = tmp
+	var tmp []int64 = make([]int64, 0, l)
+	var ex bool = false
+	if rec[l-1]+1 == start { //	//绝大多数情况
+		tmp = rec
+		tmp[l-1] = end
+	} else { //覆盖所有情况
+
+		var max func(x, y int64) int64 = func(x, y int64) int64 {
+			if x > y {
+				return x
 			}
-			rec[a] = endbias
+			return y
 		}
-		if b&0b1 == 0 {
-			if b-2 >= 0 && bias-rec[b-1] == 1 { //rebuid
-				var tmp []int64 = make([]int64, b-2, reclen-2)
-				copy(tmp, rec)
-				tmp = append(tmp, rec[a:]...)
-				rec = tmp
-			} else {
-				rec[b] = bias
+		var min func(x, y int64) int64 = func(x, y int64) int64 {
+			if x < y {
+				return x
 			}
+			return y
 		}
+		var merged bool = false
 
-	} else if a-b == 1 {
-		if b&0b1 == 0 {
-			rec[b] = bias
-			rec[a] = endbias
-		} else { //rebuild
-			tmp := rec[:b]
-			tmp = append(tmp, rec[:a+1]...)
-			rec = tmp
-		}
-	} else { // rebuild
-
-		var tmp []int64 = make([]int64, b, reclen)
-		copy(tmp, rec)
-		if b&0b1 == 0 {
-
-			tmp = append(tmp, bias)
-			if a&0b1 == 0 {
-				tmp = append(tmp, rec[a+1:]...)
-			} else {
-				tmp = append(tmp, endbias)
-				if a+1 <= ei {
-					tmp = append(tmp, rec[a+1:]...)
+		for i := 0; i < l; i = i + 2 {
+			if rec[i]-1 > end {
+				if !merged {
+					tmp = append(tmp, start, end)
+					merged = true
 				}
+				tmp = append(tmp, rec[i], rec[i+1])
+			} else if rec[i+1]+1 < start {
+				tmp = append(tmp, rec[i], rec[i+1])
+			} else { //有重复区间
+				start = min(start, rec[i])
+				end = max(end, rec[i+1])
+				ex = true
 			}
-			rec = tmp
-
-		} else {
-			if a&0b1 == 0 {
-				tmp = append(tmp, rec[a+1:]...)
-			} else {
-				tmp = append(tmp, endbias)
-				if a+1 <= ei {
-					tmp = append(tmp, rec[a+1:]...)
-				}
-			}
-			rec = tmp
+		}
+		if !merged {
+			tmp = append(tmp, start, end)
 		}
 	}
-	// need rebuild rec
-	return rec
+	return tmp, ex
 }
