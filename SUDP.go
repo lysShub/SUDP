@@ -59,6 +59,12 @@ func (s *SUDP) Send(path string, startBias int64) error {
 	if com.Errorlog(err) {
 		return err
 	}
+	go func() {
+		for {
+			fmt.Println("速度：", s.Speed)
+			time.Sleep(time.Second)
+		}
+	}()
 
 	if fi.Mode().IsDir() { // floder
 		inf, basepath, out, err := com.GetFloderInfo(path)

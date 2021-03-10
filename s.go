@@ -120,14 +120,14 @@ func (s *SUDP) sreceiver(conn *net.UDPConn, end *bool, rs chan []byte) {
 func (s *SUDP) sendResendData(conn *net.UDPConn, fh *os.File, rs chan []byte) {
 	var d []byte = make([]byte, 7)
 	var bias, len int64
-	var r int64
+	var resendLen int64 //上一秒重复数据大小
 	go func() {
 		for { // speed control strategy
-			if r != 0 {
+			if resendLen != 0 {
 				s.Speed = s.Speed + 512 // KB/s 快增长
-
 			}
-			r = 0
+			s.Speed = s.Speed + 512 // KB/s 快增长
+			resendLen = 0
 			time.Sleep(s.SCF)
 		}
 	}()
@@ -135,7 +135,7 @@ func (s *SUDP) sendResendData(conn *net.UDPConn, fh *os.File, rs chan []byte) {
 		d = <-rs
 		bias = int64(d[5])<<40 + int64(d[4])<<32 + int64(d[3])<<24 + int64(d[2])<<16 + int64(d[1])<<8 + int64(d[0])
 		len = int64(d[7])<<8 + int64(d[6])
-		r = r + len // rcorde resend data size
+		resendLen = resendLen + len // rcorde resend data size
 
 		p := make([]byte, len, len+25)
 		p, _, _, err := file.ReadFile(fh, p, bias, &s.Key)

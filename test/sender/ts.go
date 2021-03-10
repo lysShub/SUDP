@@ -31,6 +31,6 @@ func main() {
 	S.Sconn = conn
 	S.SCF = time.Second
 
-	fmt.Println(S.Send(`E:/a/classes.dex`, 0))
+	fmt.Println(S.Send(`E:\a\assets\gmsstd_stari.apk`, 0))
 
 }
