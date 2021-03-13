@@ -1,0 +1,136 @@
+package main
+
+import (
+	"SUDP/internal/packet"
+	"fmt"
+	"net/http"
+	_ "net/http/pprof"
+	"os"
+	"time"
+)
+
+func main() {
+	// a := time.Now().Unix()
+	// S()
+	// b := time.Now().Unix()
+	// fmt.Println(b - a)
+	go func() {
+		for {
+			S()
+		}
+	}()
+	http.ListenAndServe(":8080", nil)
+}
+
+// S ss
+func S() {
+	fh, err := os.Open(`E:\a.mp4`)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fi, err := fh.Stat()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	// var c1 chan []byte
+	// var c2 chan []byte
+	// var c3 chan []byte
+	// var c4 chan []byte
+	var c1 chan *[]byte = make(chan *[]byte)
+	var c2 chan *[]byte = make(chan *[]byte)
+	var c3 chan *[]byte = make(chan *[]byte)
+	var c4 chan *[]byte = make(chan *[]byte)
+	var c5 chan *[]byte = make(chan *[]byte)
+	var c6 chan *[]byte = make(chan *[]byte)
+	var c7 chan *[]byte = make(chan *[]byte)
+	var f1 chan bool = make(chan bool)
+	var f2 chan bool = make(chan bool)
+	var f3 chan bool = make(chan bool)
+	var f4 chan bool = make(chan bool)
+	var f5 chan bool = make(chan bool)
+	var f6 chan bool = make(chan bool)
+	var f7 chan bool = make(chan bool)
+	var p1 []byte = make([]byte, 1024, 1100)
+	var p2 []byte = make([]byte, 1024, 1100)
+	var p3 []byte = make([]byte, 1024, 1100)
+	var p4 []byte = make([]byte, 1024, 1100)
+	var p5 []byte = make([]byte, 1024, 1100)
+	var p6 []byte = make([]byte, 1024, 1100)
+	var p7 []byte = make([]byte, 1024, 1100)
+
+	var b []byte = make([]byte, 1024, 1100)
+
+	go s(c1, f1)
+	go s(c2, f2)
+	go s(c3, f3)
+	go s(c4, f4)
+	go s(c5, f5)
+	go s(c6, f6)
+	go s(c7, f7)
+	// go s(f1)
+	// go s(f2)
+	// go s(f3)
+	// go s(f4)
+	// go s(f5)
+	// go s(f6)
+	// go s(f7)
+	for i := 0; i < int(fi.Size()); i = i + 1024 {
+		n, err := fh.ReadAt(b, int64(i))
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		// 分配协程
+		// select {
+		// case c1 <- b[:n]:
+		// case c2 <- b[:n]:
+		// case c3 <- b[:n]:
+		// case c4 <- b[:n]:
+		// case c5 <- b[:n]:
+		// case c6 <- b[:n]:
+		// case c7 <- b[:n]:
+		// case <-time.After(time.Second):
+		// 	fmt.Println("超时，没有被写入", i)
+		// }
+		// fmt.Println(i)
+		select {
+		case f1 <- true:
+			copy(p1, b[:n])
+			c1 <- &p1
+		case f2 <- true:
+			copy(p2, b[:n])
+			c2 <- &p2
+		case f3 <- true:
+			copy(p3, b[:n])
+			c3 <- &p3
+		case f4 <- true:
+			copy(p4, b[:n])
+			c4 <- &p4
+		case f5 <- true:
+			copy(p5, b[:n])
+			c5 <- &p5
+		case f6 <- true:
+			copy(p6, b[:n])
+			c6 <- &p6
+		case f7 <- true:
+			copy(p7, b[:n])
+			c7 <- &p7
+		case <-time.After(time.Second):
+			fmt.Println("超时，没有被写入", i)
+		}
+	}
+
+}
+func s(c chan *[]byte, f chan bool) { //c chan *[]byte,
+	for {
+		<-f
+		_, _, _, err := packet.PackageDataPacket(*(<-c), 1025, [16]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf}, false)
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
+}

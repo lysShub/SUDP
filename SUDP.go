@@ -61,7 +61,7 @@ func (s *SUDP) Send(path string, startBias int64) error {
 	}
 	go func() {
 		for {
-			fmt.Println("速度：", s.Speed)
+			// fmt.Println("速度：", s.Speed, s.speedToDelay())
 			time.Sleep(time.Second)
 		}
 	}()
@@ -93,7 +93,8 @@ func (s *SUDP) Send(path string, startBias int64) error {
 		if err != nil {
 			return err
 		}
-		err = s.sender(fh, filepath.Base(path), s.Sconn, 0, true)
+		// err = s.sender(fh, filepath.Base(path), s.Sconn, 0, true)
+		err = s.TestSender(fh, filepath.Base(path), s.Sconn, 0, true)
 		if err != nil {
 			fmt.Println(err)
 		}

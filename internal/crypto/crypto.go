@@ -9,7 +9,7 @@ import (
 
 /*
 * en/de crypt
-* !!! the key is also used as the initialization vector, less safety
+* !!! 初始化向量有随机要求，将密钥作为初始化向量可能不安全
  */
 
 // CbcEncrypt encrypt
@@ -50,5 +50,11 @@ func CbcDecrypt(key []byte, c []byte) error {
 	mode := cipher.NewCBCDecrypter(block, key)
 	mode.CryptBlocks(c[0:], c)
 
+	return nil
+}
+
+// CbcTest 测试用
+func CbcTest(b cipher.BlockMode, c []byte) error {
+	b.CryptBlocks(c[0:], c)
 	return nil
 }

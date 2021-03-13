@@ -11,11 +11,8 @@ import (
 	"time"
 )
 
-func (s *SUDP) sender(fh *os.File, name string, conn *net.UDPConn, bias int64, endfile bool) error {
-
-	if err := s.sstart(fh, name, conn, bias); err != nil {
-		return err
-	}
+// TestSender 测试读取速度
+func (s *SUDP) TestSender(fh *os.File, name string, conn *net.UDPConn, bias int64, endfile bool) error {
 	var end *bool
 	var e bool = false
 	end = &e
@@ -28,18 +25,66 @@ func (s *SUDP) sender(fh *os.File, name string, conn *net.UDPConn, bias int64, e
 	for {
 		d = make([]byte, s.MTU, s.MTU+25)
 
-		d, n, final, err := file.ReadFile(fh, d, bias, &s.Key)
+		_, n, final, err := file.ReadFile(fh, d, bias, &s.Key)
 		if com.Errorlog(err) {
 			continue
 		}
 
-		_, err = conn.Write(d)
+		// _, err = conn.Write(d)
 		if com.Errorlog(err) {
 			continue
 		}
 
 		bias = bias + int64(n)
-		time.Sleep(s.speedToDelay())
+		// time.Sleep(s.speedToDelay())
+		// time.Sleep(time.Microsecond * 80)
+		if final {
+			fmt.Println("发送了最后包")
+			return nil
+		}
+	}
+
+	for {
+		if *end {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+
+	return nil
+}
+
+func (s *SUDP) sender(fh *os.File, name string, conn *net.UDPConn, bias int64, endfile bool) error {
+
+	// if err := s.sstart(fh, name, conn, bias); err != nil {
+	// 	return err
+	// }
+
+	var end *bool
+	var e bool = false
+	end = &e
+
+	rs := make(chan []byte, 128) // 重发数据信息管道
+	go s.sreceiver(conn, end, rs)
+	go s.sendResendData(conn, fh, rs)
+
+	var d []byte
+	for {
+		d = make([]byte, s.MTU, s.MTU+25)
+
+		_, n, final, err := file.ReadFile(fh, d, bias, &s.Key)
+		if com.Errorlog(err) {
+			continue
+		}
+
+		// _, err = conn.Write(d)
+		if com.Errorlog(err) {
+			continue
+		}
+
+		bias = bias + int64(n)
+		// time.Sleep(s.speedToDelay())
+		// time.Sleep(time.Microsecond * 80)
 		if final {
 			fmt.Println("发送了最后包")
 			break
@@ -80,7 +125,7 @@ func (s *SUDP) sstart(fh *os.File, name string, conn *net.UDPConn, bias int64) e
 		if err != nil { // 解析包出错
 			return err
 		}
-		if bias == 0x3FFFFF0000 {
+		if bias == 0x3FFFFF0000 { // 接收到开始包
 			return nil
 		}
 	}

@@ -74,7 +74,7 @@ func ParseDataPacket(d []byte, k [16]byte) (int, int64, bool, error) {
 	var b int64 = int64(d[len(d)-5])<<30 + int64(d[len(d)-4])<<22 + int64(d[len(d)-3])<<14 + int64(d[len(d)-2])<<6 + int64(d[len(d)-1])>>2
 
 	var end bool = false
-	if uint8(1)&uint8(d[len(d)-1]) == 1 { // final data packet
+	if 1&uint8(d[len(d)-1]) == 1 { // final data packet
 		end = true
 	}
 
